@@ -6,6 +6,7 @@
 #define GRAPHCUT_TEXTURES_PATCHER_H
 
 #include "image.h"
+#include "RandomOffsetChooser.h"
 
 class Patcher {
 
@@ -13,6 +14,7 @@ private:
     const Image<Vec3b> patch;
     Image<float> oldSeams;
     Image<Vec3b> output;
+    Image<uchar> outputMask;
 
     RandomOffsetChooser rndOffsetChooser;
 
