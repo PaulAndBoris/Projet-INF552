@@ -10,4 +10,4 @@ INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
 ADD_EXECUTABLE(gc_textures Patcher.cpp Patcher.h RandomOffsetChooser.cpp RandomOffsetChooser.h)
 
-TARGET_LINK_LIBRARIES(stable_fluids ${OpenCV_LIBS})
+TARGET_LINK_LIBRARIES(gc_textures ${OpenCV_LIBS})
