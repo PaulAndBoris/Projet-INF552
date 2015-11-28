@@ -18,9 +18,9 @@ private:
     bool checkOffset(const int offX, const int offY) const;
 
 public:
-    RandomOffsetChooser(const Mat *patch, const Mat *outputMask);
+    RandomOffsetChooser(const Image<Vec3b> *patch, const Image<uchar> *outputMask);
 
-    Point const getNewOffset() const;
+    const Point getNewOffset(bool *foundMask) const;
 
 };
 

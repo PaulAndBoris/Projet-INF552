@@ -4,31 +4,33 @@
 
 #include "RandomOffsetChooser.h"
 
-#define OVLP_WIDTH 4
+#define OVERLAP_WIDTH 1<<3
 
-RandomOffsetChooser::RandomOffsetChooser(const Mat *patch, const Mat *outputMask) :
-        patch((Image<Vec3b> *)patch),
-        outputMask((Image<uchar> *)outputMask) {
+RandomOffsetChooser::RandomOffsetChooser(const Image<Vec3b> *patch, const Image<uchar> *outputMask) :
+        patch(patch),
+        outputMask(outputMask) {
 
     // Initialise random number generator
     srand((unsigned int) time(NULL));
 }
 
 // Returns a valid offset for the new patch to apply
-Point const RandomOffsetChooser::getNewOffset() const {
+const Point RandomOffsetChooser::getNewOffset(bool *foundMask) const {
 
     int minX, maxX, minY, maxY;
     getBoundaries(*outputMask, &minX, &maxX, &minY, &maxY);
 
-    if (minX < 0 || minY < 0)
-        return Point(randRange(0, outputMask->width() - patch->width() + 1), randRange(0, outputMask->height() - patch->height() + 1));
-
-    else {
+    if (maxX < 0 || maxY < 0) {
+        *foundMask = false;
+        return Point(randRange(0, outputMask->width()  - patch->width()  + 1),
+                     randRange(0, outputMask->height() - patch->height() + 1));
+    } else {
+        *foundMask = true;
 
         int offX, offY;
         do {
-            offX = randRange(minX - patch->width() + 1, maxX);
-            offY = randRange(minY - patch->height() + 1, maxY);
+            offX = randRange(max(0, minX - patch->width()  + 1), min(maxX, outputMask->width()  - patch->width()  + 1));
+            offY = randRange(max(0, minY - patch->height() + 1), min(maxY, outputMask->height() - patch->height() + 1));
         } while (!checkOffset(offX, offY));
 
         return Point(offX, offY);
@@ -50,40 +52,43 @@ void RandomOffsetChooser::getBoundaries(const Image<uchar> &mask, int *minX, int
 
         for (x = 0; x < mask.width(); x++)
             if (mask(x, y) && x < *minX) {
-                *minX = (int) x;
+                *minX = x;
                 break;
             }
 
         for (x++; x < mask.width(); x++)
             if (!mask(x, y) && x > *maxX) {
-                *maxX = (int) x-1;
+                *maxX = x-1;
                 break;
             }
     }
 
-    if (*minX == mask.width()-1) // Mask touches the border of the image
-        *maxX = *minX;
-    else if (minX < 0) // No pixel found, we can return already
+    if (*minX == mask.width()) // No pixel found, we can return already
         return;
+    else if (*maxX < *minX) // Mask touches the border of the image
+        *maxX = mask.width() - 1;
+
 
     // Iterate on columns
     for (x = 0; x < mask.width(); x++) {
 
         for (y = 0; y < mask.height(); y++)
             if (mask(x, y) && y < *minY) {
-                *minY = (int) y;
+                *minY = y;
                 break;
             }
 
         for (y++; y < mask.height(); y++)
             if (!mask(x, y) && y > *maxY) {
-                *maxY = (int) y-1;
+                *maxY = y-1;
                 break;
             }
     }
 
-    if (*minY == mask.height()-1)
-        *maxY = *minY;
+    if (*minY == mask.height()) // No pixel found, we can return already
+        return;
+    else if (*maxY < *minY) // Mask touches the border of the image
+        *maxY = mask.height() - 1;
 }
 
 // Returns random integer value in [min, max[
@@ -99,5 +104,5 @@ bool RandomOffsetChooser::checkOffset(const int offX, const int offY) const {
     int minX, maxX, minY, maxY;
     getBoundaries(patchMask, &minX, &maxX, &minY, &maxY);
 
-    return (maxX - minX >= OVLP_WIDTH && maxY - minY >= OVLP_WIDTH);
+    return (maxX - minX >= OVERLAP_WIDTH && maxY - minY >= OVERLAP_WIDTH);
 }

@@ -5,23 +5,36 @@
 #ifndef GRAPHCUT_TEXTURES_PATCHER_H
 #define GRAPHCUT_TEXTURES_PATCHER_H
 
+#define CAP_TYPE float
+#define GRAPH_TYPE Graph<CAP_TYPE, CAP_TYPE, CAP_TYPE>
+
 #include "image.h"
 #include "RandomOffsetChooser.h"
+#include "maxflow/graph.h"
 
 class Patcher {
 
 private:
     const Image<Vec3b> patch;
-    Image<float> oldSeams;
+    const Rect canvasRect;
     Image<Vec3b> output;
     Image<uchar> outputMask;
+    float *oldSeams;
 
     RandomOffsetChooser rndOffsetChooser;
 
-public:
+    GRAPH_TYPE *buildGraphForOffset(const Point &offset) const;
+    int seamIndex(const Point &outputPoint, char direction) const;
+    int nodeIndex(const Point &patchPoint, char direction = 0) const;
+    Point translatePoint(const Point &pt, char direction) const;
+    float edgeWeight(const Point &patchPoint, const Point &outputPoint, char direction) const;
 
-    Patcher(const Mat &patch, size_t width, size_t height);
-    const Mat& randomStep();
+public:
+    Patcher(const Image<Vec3b> &patch, int width, int height);
+    ~Patcher();
+
+    const Image<Vec3b> randomStep();
+
 };
 
 
