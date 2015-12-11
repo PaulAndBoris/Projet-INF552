@@ -28,10 +28,10 @@ const Point RandomOffsetChooser::getNewOffset(bool *foundMask) const {
         *foundMask = true;
 
         int offX, offY;
-        do {
+       // do {
             offX = randRange(max(0, minX - patch->width()  + 1), min(maxX, outputMask->width()  - patch->width()  + 1));
             offY = randRange(max(0, minY - patch->height() + 1), min(maxY, outputMask->height() - patch->height() + 1));
-        } while (!checkOffset(offX, offY));
+        //} while (!checkOffset(offX, offY));
 
         return Point(offX, offY);
     }

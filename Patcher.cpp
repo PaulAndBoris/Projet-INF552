@@ -36,10 +36,10 @@ int Patcher::nodeIndex(const Point &patchPoint, char direction) const {
     switch (direction) {
         case NONE:
             return patchPoint.y * patch.width() + patchPoint.x + 0;
-        case RIGHT:
+        case RIGHT: //Doesn't work if the node is at the right edge
             return patchPoint.y * patch.width() + patchPoint.x + 1;
-        case BOTTOM:
-            return patchPoint.y * patch.width() + patchPoint.x + patch.width();
+        case BOTTOM: //Doesn't work if the node is at the bottom edge
+            return (patchPoint.y + 1) * patch.width() + patchPoint.x;
         default:
             printf("Patcher::nodeIndex direction is not valid.\n");
             return -1;
@@ -76,6 +76,7 @@ Point Patcher::translatePoint(const Point &pt, char direction) const {
 
 const Image<Vec3b> Patcher::randomStep() {
 
+
     bool foundMask;
     Point offset = rndOffsetChooser.getNewOffset(&foundMask);
 
@@ -85,12 +86,14 @@ const Image<Vec3b> Patcher::randomStep() {
         GRAPH_TYPE *graph;
         CAP_TYPE flow;
 
-        do {
+       // do {
             offset = rndOffsetChooser.getNewOffset(&foundMask);
             graph = buildGraphForOffset(offset);
 
+            cout<<"nombre de noeuds : "<<graph->get_node_num()<<endl;
+        cout<<"nombre d'arretes : "<<graph->get_arc_num()<<endl;
             flow = graph->maxflow();
-        } while (flow > 300);
+       // } while (flow > 300);
 
         cout << "Flow = " << flow << endl;
 
@@ -99,7 +102,7 @@ const Image<Vec3b> Patcher::randomStep() {
         for (pt.y = 0; pt.y < patch.height(); pt.y++)
             for (pt.x = 0; pt.x < patch.width(); pt.x++) {
 
-                patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt)) == GRAPH_TYPE::SINK || !outputMask(offset + pt)) ? 255 : 0);
+                patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt)) == GRAPH_TYPE::SINK /*|| !outputMask(offset + pt)*/) ? 255 : 0);
 
                 // TODO: Update oldSeam array
 //            if (pt.y < patch.height() - 1 && pt.x < patch.width() - 1)
@@ -128,21 +131,63 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
     graph->add_node(patch.width() * patch.height());
     int lastNode = patch.width() * patch.height();
 
+    int edge_count = 0;
+    int link_count = 0;
+
     bool linkedNodes[patch.width() * patch.height()];
     memset(linkedNodes, false, patch.width() * patch.height() * sizeof(bool));
 
     Point patchPoint;
 
-    for (patchPoint.y = 0; patchPoint.y < patch.height() - 1; patchPoint.y++) {
-        for (patchPoint.x = 0; patchPoint.x < patch.width() - 1; patchPoint.x++) {
+    patchPoint.x = 0;
+    for (patchPoint.y = 0; patchPoint.y < patch.height(); patchPoint.y++) {
+        const Point outputPoint = offset + patchPoint;
+        const int node = nodeIndex(patchPoint);
+        if(outputMask(outputPoint)){
+            graph->add_tweights(node, INFINITY , 0);
+            linkedNodes[node] = true;
+            link_count++;
+        }
+
+    }
+    patchPoint.x = patch.width() -1;
+    for (patchPoint.y = 0; patchPoint.y < patch.height(); patchPoint.y++) {
+        const Point outputPoint = offset + patchPoint;
+        const int node = nodeIndex(patchPoint);
+        if (outputMask(outputPoint)) {
+            graph->add_tweights(node, INFINITY, 0);
+            linkedNodes[node] = true;
+            link_count++;
+        }
+    }
+
+    patchPoint.y = 0;
+    for (patchPoint.x = 0; patchPoint.x < patch.width(); patchPoint.x++) {
+        const Point outputPoint = offset + patchPoint;
+        const int node = nodeIndex(patchPoint);
+        if (outputMask(outputPoint)) {
+            graph->add_tweights(node, INFINITY, 0);
+            linkedNodes[node] = true;
+            link_count++;
+        }
+    }
+
+    patchPoint.y = patch.height() -1;
+    for (patchPoint.x = 0; patchPoint.x < patch.width(); patchPoint.x++) {
+        const Point outputPoint = offset + patchPoint;
+        const int node = nodeIndex(patchPoint);
+        if (outputMask(outputPoint)) {
+            graph->add_tweights(node, INFINITY, 0);
+            linkedNodes[node] = true;
+            link_count++;
+        }
+    }
+
+    for (patchPoint.y = 0; patchPoint.y < patch.height() - 1 ; patchPoint.y++) {
+        for (patchPoint.x = 0; patchPoint.x < patch.width() - 1 ; patchPoint.x++) {
 
             const Point outputPoint = offset + patchPoint;
             const int node = nodeIndex(patchPoint);
-
-            if (!linkedNodes[node] && (patchPoint.x == 0 || patchPoint.y == 0) && outputMask(outputPoint)) {
-                    graph->add_tweights(node, INFINITY, 0);
-                    linkedNodes[node] = true;
-            }
 
             for (char direction = RIGHT; direction != LAST; direction++) {
 
@@ -160,6 +205,7 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
                     const int seam = seamIndex(outputPoint, direction);
                     const CAP_TYPE cap = edgeWeight(patchPoint, outputPoint, direction);
 
+
                     if (oldSeams[seam] >= 0) {
                         printf("Ca c'est pas normal\n");
                         graph->add_node();
@@ -171,32 +217,38 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
                         lastNode++;
                     } else {
                         graph->add_edge(node, neighborNode, cap, cap);
+                        edge_count++;
                     }
                 }
 
-                if (!linkedNodes[neighborNode]) {
 
-                    if (((patchPoint.x == patch.width()  - 2 && direction == RIGHT) ||
-                         (patchPoint.y == patch.height() - 2 && direction == BOTTOM)) && outputMask(neighborPoint)) {
+                if (!outputMask(neighborPoint) && !linkedNodes[neighborNode]) {
+                    graph->add_tweights(neighborNode, 0, INFINITY);
+                    linkedNodes[neighborNode] = true;
+                    link_count++;
+/*                    if (outputMask(outputPoint) && !linkedNodes[node]) {
+                        graph->add_tweights(neighborNode, 0, INFINITY);
+                        linkedNodes[node] = true;
+                    }*/
+                }
 
-                        graph->add_tweights(neighborNode, INFINITY, 0);
-                        linkedNodes[neighborNode] = true;
-
-                    } else if (outputMask(neighborPoint) && !outputMask(outputPoint)) {
-
+                if (!outputMask(outputPoint) && !linkedNodes[node]) {
+                graph->add_tweights(node, 0, INFINITY);
+                linkedNodes[node] = true;
+                    link_count++;
+                    if(outputMask(neighborPoint) && !linkedNodes[neighborNode]){
                         graph->add_tweights(neighborNode, 0, INFINITY);
                         linkedNodes[neighborNode] = true;
+                        link_count++;
                     }
-                }
-
-                if (!linkedNodes[node] && outputMask(outputPoint) && !outputMask(neighborPoint)) {
-
-                    graph->add_tweights(node, 0, INFINITY);
-                    linkedNodes[node] = true;
                 }
             }
         }
     }
+//    printf("Nombre d'arrêtes : %f" , (double) edge_count);
+//    printf("\nNombre de liens : %f " ,(double) link_count);
+
+
 
 //    Test
 //

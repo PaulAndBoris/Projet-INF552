@@ -11,7 +11,7 @@
 int main() {
 
     const Image<Vec3b> patch = imread("../patch3.png", IMREAD_COLOR);
-    Patcher patcher(patch, 1000, 800);
+    Patcher patcher(patch, 1000, 700);
 
     do {
         imshow("Result", patcher.randomStep());
