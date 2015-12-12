@@ -11,6 +11,8 @@
 enum Direction {
     NONE = 0,
     RIGHT,
+    LEFT,
+    UP,
     BOTTOM,
     LAST
 };
@@ -36,9 +38,13 @@ int Patcher::nodeIndex(const Point &patchPoint, char direction) const {
     switch (direction) {
         case NONE:
             return patchPoint.y * patch.width() + patchPoint.x + 0;
-        case RIGHT: //Doesn't work if the node is at the right edge
+        case RIGHT: //Doesn't work if the node is on the right edge
             return patchPoint.y * patch.width() + patchPoint.x + 1;
-        case BOTTOM: //Doesn't work if the node is at the bottom edge
+        case LEFT: //Doesn't work if the node is on the left edge
+            return patchPoint.y * patch.width() + patchPoint.x - 1;
+        case UP: //Doesn't work if the node is on the top edge
+            return (patchPoint.y - 1) * patch.width() + patchPoint.x;
+        case BOTTOM: //Doesn't work if the node is on the bottom edge
             return (patchPoint.y + 1) * patch.width() + patchPoint.x;
         default:
             printf("Patcher::nodeIndex direction is not valid.\n");
@@ -52,6 +58,10 @@ int Patcher::seamIndex(const Point &outputPoint, char direction) const {
             return 2 * (outputPoint.y * output.width() + outputPoint.x) + 0;
         case BOTTOM:
             return 2 * (outputPoint.y * output.width() + outputPoint.x) + 1;
+        case LEFT:
+            return 2 * (outputPoint.y * output.width() + outputPoint.x) + 0;
+        case UP:
+            return 2 * (outputPoint.y * output.width() + outputPoint.x) + 1;
         default:
             printf("Patcher::seamIndex direction is not valid.\n");
             return -1;
@@ -64,6 +74,10 @@ Point Patcher::translatePoint(const Point &pt, char direction) const {
             return pt;
         case RIGHT:
             return Point(pt.x + 1, pt.y);
+        case LEFT:
+            return Point(pt.x -1, pt.y);
+        case UP:
+            return Point(pt.x, pt.y - 1);
         case BOTTOM:
             return Point(pt.x, pt.y + 1);
         default:
@@ -102,7 +116,7 @@ const Image<Vec3b> Patcher::randomStep() {
         for (pt.y = 0; pt.y < patch.height(); pt.y++)
             for (pt.x = 0; pt.x < patch.width(); pt.x++) {
 
-                patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt)) == GRAPH_TYPE::SINK /*|| !outputMask(offset + pt)*/) ? 255 : 0);
+                patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt)) == GRAPH_TYPE::SOURCE && (outputMask(pt+offset))) ? 0 : 255);
 
                 // TODO: Update oldSeam array
 //            if (pt.y < patch.height() - 1 && pt.x < patch.width() - 1)
@@ -124,21 +138,12 @@ const Image<Vec3b> Patcher::randomStep() {
     return ((Mat) output)(canvasRect);
 }
 
-GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
-
-    GRAPH_TYPE *graph = new GRAPH_TYPE(patch.width() * patch.height(), patch.width() * patch.height() * 2);
-
-    graph->add_node(patch.width() * patch.height());
-    int lastNode = patch.width() * patch.height();
-
-    int edge_count = 0;
-    int link_count = 0;
-
-    bool linkedNodes[patch.width() * patch.height()];
-    memset(linkedNodes, false, patch.width() * patch.height() * sizeof(bool));
+void Patcher::setBoundaries(const Point & offset, GRAPH_TYPE *graph, bool* linkedNodes) const{
 
     Point patchPoint;
 
+
+    //Points on the edge of the patch and in the output mask must come from the original image
     patchPoint.x = 0;
     for (patchPoint.y = 0; patchPoint.y < patch.height(); patchPoint.y++) {
         const Point outputPoint = offset + patchPoint;
@@ -146,7 +151,6 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
         if(outputMask(outputPoint)){
             graph->add_tweights(node, INFINITY , 0);
             linkedNodes[node] = true;
-            link_count++;
         }
 
     }
@@ -157,7 +161,6 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
         if (outputMask(outputPoint)) {
             graph->add_tweights(node, INFINITY, 0);
             linkedNodes[node] = true;
-            link_count++;
         }
     }
 
@@ -168,7 +171,6 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
         if (outputMask(outputPoint)) {
             graph->add_tweights(node, INFINITY, 0);
             linkedNodes[node] = true;
-            link_count++;
         }
     }
 
@@ -179,26 +181,61 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
         if (outputMask(outputPoint)) {
             graph->add_tweights(node, INFINITY, 0);
             linkedNodes[node] = true;
-            link_count++;
         }
     }
 
-    for (patchPoint.y = 0; patchPoint.y < patch.height() - 1 ; patchPoint.y++) {
-        for (patchPoint.x = 0; patchPoint.x < patch.width() - 1 ; patchPoint.x++) {
+    //Points on the edge of the output mask and in the patch belong to the patch
+    //These points are the neighbors of patch points not in the mask which are in the output mask
+    //CAUTION : these neighbors can be right, left, bottom and up !
+
+    for (patchPoint.y = 1; patchPoint.y < patch.height() - 1 ; patchPoint.y++) {
+        for (patchPoint.x = 1; patchPoint.x < patch.width() - 1; patchPoint.x++) {
+
+            const Point outputPoint = offset + patchPoint;
+
+            for (char direction = RIGHT; direction != LAST; direction++) {
+
+                const Point neighborPoint = translatePoint(outputPoint, direction);
+                const int neighborNode = nodeIndex(patchPoint, direction);
+
+                if (!outputMask(outputPoint) && outputMask(neighborPoint) && !linkedNodes[neighborNode]) {
+                    graph->add_tweights(neighborNode, 0, INFINITY);
+                    linkedNodes[neighborNode] = true;
+
+                    }
+                }
+            }
+        }
+    }
+
+
+GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
+
+    GRAPH_TYPE *graph = new GRAPH_TYPE(patch.width() * patch.height(), patch.width() * patch.height() * 2);
+
+    graph->add_node(patch.width() * patch.height());
+    int lastNode = patch.width() * patch.height();
+
+    int edge_count = 0;
+
+    bool linkedNodes[patch.width() * patch.height()];
+    memset(linkedNodes, false, patch.width() * patch.height() * sizeof(bool));
+
+    Point patchPoint;
+
+    setBoundaries(offset, graph, linkedNodes);
+
+    for (patchPoint.y = 1; patchPoint.y < patch.height() - 1 ; patchPoint.y++) {
+        for (patchPoint.x = 1; patchPoint.x < patch.width() - 1 ; patchPoint.x++) {
 
             const Point outputPoint = offset + patchPoint;
             const int node = nodeIndex(patchPoint);
 
             for (char direction = RIGHT; direction != LAST; direction++) {
 
-                // Case 1. pixel is in mask and its neighbor too                   == OVERLAP
-                // Case 2. pixel is in mask but not its neighbor                   == END OF OVERLAP -- PATCH SIDE
-                // Case 3. pixel is not in mask but its neighbor is                == END OF OVERLAP -- PATCH SIDE
-                // Case 4. pixel is on the border of the patch and inside the mask == END OF OVERLAP -- OUTPUT SIDE
-                // Case 5. pixel and its neighbor are not in mask                  == NOT IMPORTANT
-
                 const Point neighborPoint = translatePoint(outputPoint, direction);
                 const int neighborNode = nodeIndex(patchPoint, direction);
+
 
                 if (outputMask(outputPoint) && outputMask(neighborPoint)) {
 
@@ -220,32 +257,10 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
                         edge_count++;
                     }
                 }
-
-
-                if (!outputMask(neighborPoint) && !linkedNodes[neighborNode]) {
-                    graph->add_tweights(neighborNode, 0, INFINITY);
-                    linkedNodes[neighborNode] = true;
-                    link_count++;
-/*                    if (outputMask(outputPoint) && !linkedNodes[node]) {
-                        graph->add_tweights(neighborNode, 0, INFINITY);
-                        linkedNodes[node] = true;
-                    }*/
-                }
-
-                if (!outputMask(outputPoint) && !linkedNodes[node]) {
-                graph->add_tweights(node, 0, INFINITY);
-                linkedNodes[node] = true;
-                    link_count++;
-                    if(outputMask(neighborPoint) && !linkedNodes[neighborNode]){
-                        graph->add_tweights(neighborNode, 0, INFINITY);
-                        linkedNodes[neighborNode] = true;
-                        link_count++;
-                    }
-                }
             }
         }
     }
-//    printf("Nombre d'arrêtes : %f" , (double) edge_count);
+    printf("Nombre d'arrêtes : %f" , (double) edge_count);
 //    printf("\nNombre de liens : %f " ,(double) link_count);
 
 

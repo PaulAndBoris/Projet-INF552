@@ -28,6 +28,7 @@ private:
     int nodeIndex(const Point &patchPoint, char direction = 0) const;
     Point translatePoint(const Point &pt, char direction) const;
     float edgeWeight(const Point &patchPoint, const Point &outputPoint, char direction) const;
+    void setBoundaries(const Point &offset, GRAPH_TYPE *graph, bool* linkedNodes) const;
 
 public:
     Patcher(const Image<Vec3b> &patch, int width, int height);

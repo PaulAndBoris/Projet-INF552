@@ -10,7 +10,7 @@
 
 int main() {
 
-    const Image<Vec3b> patch = imread("../patch3.png", IMREAD_COLOR);
+    const Image<Vec3b> patch = imread("../patch.png", IMREAD_COLOR);
     Patcher patcher(patch, 1000, 700);
 
     do {
