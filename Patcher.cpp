@@ -85,21 +85,16 @@ const Image<Vec3b> Patcher::randomStep() {
         GRAPH_TYPE *graph;
         CAP_TYPE flow;
 
-        do {
-            offset = rndOffsetChooser.getNewOffset(&foundMask);
-            graph = buildGraphForOffset(offset);
-
-            flow = graph->maxflow();
-        } while (flow > 300);
-
-        cout << "Flow = " << flow << endl;
+        offset = rndOffsetChooser.getNewOffset(&foundMask);
+        graph = buildGraphForOffset(offset);
+        graph->maxflow();
 
         Point pt;
 
         for (pt.y = 0; pt.y < patch.height(); pt.y++)
             for (pt.x = 0; pt.x < patch.width(); pt.x++) {
 
-                patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt)) == GRAPH_TYPE::SINK || !outputMask(offset + pt)) ? 255 : 0);
+                patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt)) == GRAPH_TYPE::SINK) ? 255 : 0);
 
                 // TODO: Update oldSeam array
 //            if (pt.y < patch.height() - 1 && pt.x < patch.width() - 1)
@@ -128,23 +123,29 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
     graph->add_node(patch.width() * patch.height());
     int lastNode = patch.width() * patch.height();
 
-    bool linkedNodes[patch.width() * patch.height()];
-    memset(linkedNodes, false, patch.width() * patch.height() * sizeof(bool));
-
     Point patchPoint;
 
-    for (patchPoint.y = 0; patchPoint.y < patch.height() - 1; patchPoint.y++) {
-        for (patchPoint.x = 0; patchPoint.x < patch.width() - 1; patchPoint.x++) {
+    for (patchPoint.y = 0; patchPoint.y < patch.height(); patchPoint.y++) {
+        for (patchPoint.x = 0; patchPoint.x < patch.width(); patchPoint.x++) {
 
             const Point outputPoint = offset + patchPoint;
             const int node = nodeIndex(patchPoint);
 
-            if (!linkedNodes[node] && (patchPoint.x == 0 || patchPoint.y == 0) && outputMask(outputPoint)) {
+            if (outputMask(outputPoint)) {
+                if (patchPoint.x == 0 ||
+                    patchPoint.y == 0 ||
+                    patchPoint.x == patch.width() - 1 ||
+                    patchPoint.y == patch.height() - 1) {
+
                     graph->add_tweights(node, INFINITY, 0);
-                    linkedNodes[node] = true;
-            }
+                }
+            } else
+                graph->add_tweights(node, 0, INFINITY);
 
             for (char direction = RIGHT; direction != LAST; direction++) {
+
+                if ((direction == RIGHT && patchPoint.x == patch.width() - 1) || (direction == BOTTOM && patchPoint.y == patch.height() - 1))
+                    continue;
 
                 // Case 1. pixel is in mask and its neighbor too                   == OVERLAP
                 // Case 2. pixel is in mask but not its neighbor                   == END OF OVERLAP -- PATCH SIDE
@@ -158,10 +159,9 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
                 if (outputMask(outputPoint) && outputMask(neighborPoint)) {
 
                     const int seam = seamIndex(outputPoint, direction);
-                    const CAP_TYPE cap = edgeWeight(patchPoint, outputPoint, direction);
+                    const CAP_TYPE cap = edgeWeight(patchPoint, outputPoint, direction) + DBL_EPSILON;
 
                     if (oldSeams[seam] >= 0) {
-                        printf("Ca c'est pas normal\n");
                         graph->add_node();
 
                         graph->add_edge(node, lastNode, cap, cap);
@@ -174,42 +174,14 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
                     }
                 }
 
-                if (!linkedNodes[neighborNode]) {
-
-                    if (((patchPoint.x == patch.width()  - 2 && direction == RIGHT) ||
-                         (patchPoint.y == patch.height() - 2 && direction == BOTTOM)) && outputMask(neighborPoint)) {
-
-                        graph->add_tweights(neighborNode, INFINITY, 0);
-                        linkedNodes[neighborNode] = true;
-
-                    } else if (outputMask(neighborPoint) && !outputMask(outputPoint)) {
-
-                        graph->add_tweights(neighborNode, 0, INFINITY);
-                        linkedNodes[neighborNode] = true;
-                    }
-                }
-
-                if (!linkedNodes[node] && outputMask(outputPoint) && !outputMask(neighborPoint)) {
-
+                if (outputMask(outputPoint) && !outputMask(neighborPoint))
                     graph->add_tweights(node, 0, INFINITY);
-                    linkedNodes[node] = true;
-                }
+
+                if (outputMask(neighborPoint) && !outputMask(outputPoint))
+                    graph->add_tweights(neighborNode, 0, INFINITY);
             }
         }
     }
-
-//    Test
-//
-//    Image<uchar> testMask(Mat::zeros(patch.height(), patch.width(), CV_8U));
-//
-//    for (patchPoint.y = 0; patchPoint.y < patch.height(); patchPoint.y++)
-//        for (patchPoint.x = 0; patchPoint.x < patch.width(); patchPoint.x++)
-//            if (linkedNodes[nodeIndex(patchPoint)])
-//                testMask(patchPoint) = 255;
-//
-//    imshow("test", testMask);
-//
-//    Test end
 
     return graph;
 }
