@@ -22,8 +22,8 @@ Patcher::Patcher(const Image<Vec3b> &patch, int width, int height) :
         outputMask(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8U)),
         rndOffsetChooser(&this->patch, &this->outputMask) {
 
-    oldSeams = new CAP_TYPE[(width + 2 * patch.width()) * (height + 2 * patch.height()) * 2];
-    for (int i = 0; i < (width + 2 * patch.width()) * (height + 2 * patch.height()) * 2; oldSeams[i] = -1.f, i++);
+    oldSeams = new Seam[2*output.width()*output.height()+2];
+    for (int i = 0; i < 2*output.width()*output.height()+2; oldSeams[i].cost = -1.f, i++);
 }
 
 Patcher::~Patcher() {
@@ -49,13 +49,13 @@ int Patcher::nodeIndex(const Point &patchPoint, char direction) const {
 int Patcher::seamIndex(const Point &outputPoint, char direction) const {
     switch (direction) {
         case RIGHT:
-            return 2 * (outputPoint.y * output.width() + outputPoint.x) + 0;
+            return 2*(outputPoint.y * output.width() + outputPoint.x) + 0;
         case BOTTOM:
-            return 2 * (outputPoint.y * output.width() + outputPoint.x) + 1;
+            return 2*(outputPoint.y * output.width() + outputPoint.x) + 1;
         default:
             printf("Patcher::seamIndex direction is not valid.\n");
             return -1;
-        }
+    }
 }
 
 Point Patcher::translatePoint(const Point &pt, char direction) const {
@@ -95,11 +95,34 @@ const Image<Vec3b> Patcher::randomStep() {
             for (pt.x = 0; pt.x < patch.width(); pt.x++) {
 
                 patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt)) == GRAPH_TYPE::SINK) ? 255 : 0);
+            }
 
-                // TODO: Update oldSeam array
-//            if (pt.y < patch.height() - 1 && pt.x < patch.width() - 1)
-//                for (char direction = RIGHT; direction != LAST; direction++)
-//                    oldSeams[seamIndex(offset + pt)] = (patchMask(pt)) ?  : -1;
+        for (pt.y = 0; pt.y < patch.height(); pt.y++)
+            for (pt.x = 0; pt.x < patch.width(); pt.x++) {
+
+                //Update oldSeam array
+                if (pt.y < patch.height() - 1 && pt.x < patch.width() - 1)
+                    for (char direction = RIGHT; direction != LAST; direction++)
+                        if (!(patchMask(pt) *
+                              patchMask(translatePoint(pt, direction))) &&
+                            (patchMask(pt) +
+                             patchMask(translatePoint(pt, direction)))) {
+                            oldSeams[seamIndex(pt+offset, direction)].cost = edgeWeight(pt, pt + offset,
+                                                                                     direction);
+                            oldSeams[seamIndex(pt+offset, direction)].point_1 = output(
+                                    pt + offset);
+
+                            oldSeams[seamIndex(pt+offset, direction)].neighbor_1 = output(
+                                    translatePoint(pt, direction) + offset);
+
+                            oldSeams[seamIndex(pt+offset, direction)].point_2 = patch(pt);
+
+                            oldSeams[seamIndex(pt+offset, direction)].neighbor_2 = patch(
+                                    translatePoint(pt, direction));
+
+                        }
+
+                        else oldSeams[seamIndex(offset, direction)].cost = -1;
             }
 
         delete graph;
@@ -144,7 +167,8 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
 
             for (char direction = RIGHT; direction != LAST; direction++) {
 
-                if ((direction == RIGHT && patchPoint.x == patch.width() - 1) || (direction == BOTTOM && patchPoint.y == patch.height() - 1))
+                if ((direction == RIGHT && patchPoint.x == patch.width() - 1) ||
+                    (direction == BOTTOM && patchPoint.y == patch.height() - 1))
                     continue;
 
                 // Case 1. pixel is in mask and its neighbor too                   == OVERLAP
@@ -159,17 +183,23 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
                 if (outputMask(outputPoint) && outputMask(neighborPoint)) {
 
                     const int seam = seamIndex(outputPoint, direction);
-                    const CAP_TYPE cap = edgeWeight(patchPoint, outputPoint, direction) + DBL_EPSILON;
 
-                    if (oldSeams[seam] >= 0) {
+
+                    if (oldSeams[seam].cost >= 0) {
+                        //Add an seam node
                         graph->add_node();
-
+                        //Connect it to the new patch (e.g. SINK) with the old cost
+                        graph->add_tweights(lastNode, 0, oldSeams[seam].cost);
+                        //Connect it to the old patch, first side
+                        CAP_TYPE cap = edgeWeight(oldSeams[seam].point_1, patch(patchPoint), oldSeams[seam].neighbor_1 , patch(translatePoint(patchPoint,direction))) + DBL_EPSILON;
                         graph->add_edge(node, lastNode, cap, cap);
+                        //Connect it to the old patch, second side
+                        cap = edgeWeight(oldSeams[seam].point_2, patch(patchPoint), oldSeams[seam].neighbor_2 , patch(translatePoint(patchPoint,direction))) + DBL_EPSILON;
                         graph->add_edge(lastNode, neighborNode, cap, cap);
-                        graph->add_tweights(lastNode, 0, oldSeams[seam]);
 
                         lastNode++;
                     } else {
+                        const CAP_TYPE cap = edgeWeight(patchPoint, outputPoint, direction) + DBL_EPSILON;
                         graph->add_edge(node, neighborNode, cap, cap);
                     }
                 }
@@ -189,5 +219,10 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
 CAP_TYPE Patcher::edgeWeight(const Point &patchPoint, const Point &outputPoint, char direction) const {
 
     return norm(patch(patchPoint) - output(outputPoint)) +
-           norm(patch(translatePoint(patchPoint , direction)) - output(translatePoint(outputPoint, direction)));
+           norm(patch(translatePoint(patchPoint, direction)) - output(translatePoint(outputPoint, direction)));
+}
+
+CAP_TYPE Patcher::edgeWeight(const Vec3b &As, const Vec3b &Bs, const Vec3b &At, const Vec3b &Bt) const {
+    return norm(As - Bs) +
+           norm(At - Bt);
 }
