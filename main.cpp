@@ -14,7 +14,7 @@ int main() {
     Patcher patcher(patch, 1000, 800);
 
     do {
-        imshow("Result", patcher.randomStep());
+        imshow("Result", patcher.step());
     } while (waitKey(0) != 27);
 
     return 0;

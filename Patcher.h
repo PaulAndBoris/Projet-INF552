@@ -9,7 +9,7 @@
 #define GRAPH_TYPE Graph<CAP_TYPE, CAP_TYPE, CAP_TYPE>
 
 #include "image.h"
-#include "RandomOffsetChooser.h"
+#include "OffsetChooser.h"
 #include "maxflow/graph.h"
 
 typedef struct Seam{
@@ -30,7 +30,7 @@ private:
     Image<uchar> outputMask;
     Seam *oldSeams;
 
-    RandomOffsetChooser rndOffsetChooser;
+    OffsetChooser *offsetChooser;
 
     GRAPH_TYPE *buildGraphForOffset(const Point &offset) const;
     int seamIndex(const Point &outputPoint, char direction) const;
@@ -43,7 +43,7 @@ public:
     Patcher(const Image<Vec3b> &patch, int width, int height);
     ~Patcher();
 
-    const Image<Vec3b> randomStep();
+    const Image<Vec3b> step();
 
 };
 

@@ -8,6 +8,9 @@
 
 #include "maxflow/graph.h"
 
+#include "RandomOffsetChooser.h"
+#include "PatchMatcher.h"
+
 enum Direction {
     NONE = 0,
     RIGHT,
@@ -19,14 +22,17 @@ Patcher::Patcher(const Image<Vec3b> &patch, int width, int height) :
         patch(patch),
         canvasRect(patch.width(), patch.height(), width, height),
         output(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8UC3)),
-        outputMask(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8U)),
-        rndOffsetChooser(&this->patch, &this->outputMask) {
+        outputMask(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8U)) {
+
+//    offsetChooser = new RandomOffsetChooser(&patch, &outputMask);
+    offsetChooser = new PatchMatcher(&patch, &output, &outputMask);
 
     oldSeams = new Seam[2 * output.width() * output.height()];
     for (int i = 0; i < 2 * output.width() * output.height(); oldSeams[i].cost = -1.f, i++);
 }
 
 Patcher::~Patcher() {
+    delete offsetChooser;
     delete[] oldSeams;
 }
 
@@ -74,10 +80,10 @@ Point Patcher::translatePoint(const Point &pt, char direction) const {
 
 // Main functions
 
-const Image<Vec3b> Patcher::randomStep() {
+const Image<Vec3b> Patcher::step() {
 
     bool foundMask;
-    Point offset = rndOffsetChooser.getNewOffset(&foundMask);
+    Point offset = offsetChooser->getNewOffset(&foundMask);
 
     Image<uchar> patchMask(Mat::zeros(patch.height(), patch.width(), CV_8U) + 255);
 
@@ -85,7 +91,6 @@ const Image<Vec3b> Patcher::randomStep() {
         GRAPH_TYPE *graph;
         CAP_TYPE flow;
 
-        offset = rndOffsetChooser.getNewOffset(&foundMask);
         graph = buildGraphForOffset(offset);
         graph->maxflow();
 
