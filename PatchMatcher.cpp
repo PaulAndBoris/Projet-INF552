@@ -10,7 +10,10 @@
 #define K 1.0
 
 PatchMatcher::PatchMatcher(const Image<Vec3b> *patch, const Image<Vec3b> *output, const Image<uchar> *outputMask) :
-    OffsetChooser(patch, outputMask), output(output) {
+    OffsetChooser(),
+    patch(patch),
+    output(output),
+    outputMask(outputMask) {
 
     Scalar mean, stddev;
     meanStdDev(*patch, mean, stddev);
@@ -18,7 +21,9 @@ PatchMatcher::PatchMatcher(const Image<Vec3b> *patch, const Image<Vec3b> *output
     factor = - 1.0 / (K * pow(norm(stddev), 2) * patch->width() * patch->height());
 }
 
-Point PatchMatcher::getNewOffset(bool *foundMask) const {
+Point PatchMatcher::getNewOffset(Image<Vec3b> &newPatch, bool *foundMask) {
+
+    newPatch = *patch;
 
     int minX, maxX, minY, maxY;
     getBoundaries(*outputMask, &minX, &maxX, &minY, &maxY);
@@ -52,7 +57,7 @@ Point PatchMatcher::getNewOffset(bool *foundMask) const {
 
 //        imshow("C", C.greyImage());
 
-        float acc, *data = (float *) C.data;
+        float acc = 0, *data = (float *) C.data;
 
         for (int i = 0; i < C.height() * C.width(); i++) {
             acc += data[i];

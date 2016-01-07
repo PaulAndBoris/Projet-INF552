@@ -10,12 +10,15 @@
 class RandomOffsetChooser : public OffsetChooser{
 
 private:
+    const Image<Vec3b> *patch;
+    const Image<uchar> *outputMask;
+
     bool checkOffset(const int offX, const int offY) const;
 
 public:
     RandomOffsetChooser(const Image<Vec3b> *patch, const Image<uchar> *outputMask);
 
-    virtual Point getNewOffset(bool *foundMask) const;
+    virtual Point getNewOffset(Image<Vec3b> &newPatch, bool *foundMask);
 
 };
 

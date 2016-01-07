@@ -8,6 +8,6 @@ SET(OpenCV_STATIC OFF)
 FIND_PACKAGE(OpenCV REQUIRED)
 INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
-ADD_EXECUTABLE(gc_textures main.cpp Patcher.cpp Patcher.h RandomOffsetChooser.cpp RandomOffsetChooser.h maxflow/graph.cpp PatchMatcher.cpp PatchMatcher.h OffsetChooser.cpp OffsetChooser.h)
+ADD_EXECUTABLE(gc_textures main.cpp Patcher.cpp Patcher.h RandomOffsetChooser.cpp RandomOffsetChooser.h maxflow/graph.cpp PatchMatcher.cpp PatchMatcher.h OffsetChooser.cpp OffsetChooser.h SubPatchMatcher.cpp SubPatchMatcher.h)
 
 TARGET_LINK_LIBRARIES(gc_textures ${OpenCV_LIBS})

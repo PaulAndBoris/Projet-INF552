@@ -10,25 +10,21 @@
 
 #include "RandomOffsetChooser.h"
 #include "PatchMatcher.h"
+#include "SubPatchMatcher.h"
 
-enum Direction {
-    NONE = 0,
-    RIGHT,
-    BOTTOM,
-    LAST
-};
 
 Patcher::Patcher(const Image<Vec3b> &patch, int width, int height) :
-        patch(patch),
+        inputPatch(patch),
         canvasRect(patch.width(), patch.height(), width, height),
         output(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8UC3)),
         outputMask(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8U)) {
 
-//    offsetChooser = new RandomOffsetChooser(&patch, &outputMask);
-    offsetChooser = new PatchMatcher(&patch, &output, &outputMask);
+//    offsetChooser = new RandomOffsetChooser(&inputPatch, &outputMask);
+//    offsetChooser = new PatchMatcher(&inputPatch, &output, &outputMask);
+    offsetChooser = new SubPatchMatcher(&inputPatch, &output, &outputMask, this);
 
     oldSeams = new Seam[2 * output.width() * output.height()];
-    for (int i = 0; i < 2 * output.width() * output.height(); oldSeams[i].cost = -1.f, i++);
+    for (int i = 0; i < 2 * output.width() * output.height(); oldSeams[i].cost = 0.f, i++);
 }
 
 Patcher::~Patcher() {
@@ -38,7 +34,7 @@ Patcher::~Patcher() {
 
 // Points & direction utilities
 
-int Patcher::nodeIndex(const Point &patchPoint, char direction) const {
+int Patcher::nodeIndex(const Point &patchPoint, char direction, const Image<Vec3b> &patch) const {
     switch (direction) {
         case NONE:
             return patchPoint.y * patch.width() + patchPoint.x + 0;
@@ -64,7 +60,7 @@ int Patcher::seamIndex(const Point &outputPoint, char direction) const {
         }
 }
 
-Point Patcher::translatePoint(const Point &pt, char direction) const {
+Point Patcher::translatePoint(const Point &pt, char direction) {
     switch (direction) {
         case NONE:
             return pt;
@@ -83,7 +79,9 @@ Point Patcher::translatePoint(const Point &pt, char direction) const {
 const Image<Vec3b> Patcher::step() {
 
     bool foundMask;
-    Point offset = offsetChooser->getNewOffset(&foundMask);
+    Image<Vec3b> patch;
+
+    Point offset = offsetChooser->getNewOffset(patch, &foundMask);
 
     Image<uchar> patchMask(Mat::zeros(patch.height(), patch.width(), CV_8U) + 255);
 
@@ -91,7 +89,7 @@ const Image<Vec3b> Patcher::step() {
         GRAPH_TYPE *graph;
         CAP_TYPE flow;
 
-        graph = buildGraphForOffset(offset);
+        graph = buildGraphForOffset(offset, patch);
         graph->maxflow();
 
         Point pt;
@@ -99,7 +97,7 @@ const Image<Vec3b> Patcher::step() {
         // Create patch mask
         for (pt.y = 0; pt.y < patch.height(); pt.y++)
             for (pt.x = 0; pt.x < patch.width(); pt.x++)
-                patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt)) == GRAPH_TYPE::SINK) ? 255 : 0);
+                patchMask(pt) = (uchar) ((graph->what_segment(nodeIndex(pt, 0, patch)) == GRAPH_TYPE::SINK) ? 255 : 0);
 
         // Updating old seams
         for (pt.y = 0; pt.y < patch.height(); pt.y++)
@@ -120,7 +118,7 @@ const Image<Vec3b> Patcher::step() {
 
                         Seam &seam = oldSeams[seamIndex(outputPoint, direction)];
 
-                        seam.cost = edgeWeight(pt, outputPoint, direction);
+                        seam.cost = edgeWeight(pt, outputPoint, direction, patch);
 
                         seam.point_1 = output(outputPoint);
                         seam.neighbor_1 = output(neighborOutputPoint);
@@ -129,7 +127,7 @@ const Image<Vec3b> Patcher::step() {
                         seam.neighbor_2 = patch(neighborPt);
                     }
                     else
-                        oldSeams[seamIndex(offset, direction)].cost = -1;
+                        oldSeams[seamIndex(offset, direction)].cost = 0.f;
                 }
             }
 
@@ -147,7 +145,7 @@ const Image<Vec3b> Patcher::step() {
     return ((Mat) output)(canvasRect);
 }
 
-GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
+GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset, const Image<Vec3b> &patch) const {
 
     GRAPH_TYPE *graph = new GRAPH_TYPE(patch.width() * patch.height(), patch.width() * patch.height() * 2);
 
@@ -160,7 +158,7 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
         for (patchPoint.x = 0; patchPoint.x < patch.width(); patchPoint.x++) {
 
             const Point outputPoint = offset + patchPoint;
-            const int node = nodeIndex(patchPoint);
+            const int node = nodeIndex(patchPoint, 0, patch);
 
             if (outputMask(outputPoint)) {
                 if (patchPoint.x == 0 ||
@@ -185,13 +183,13 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
                 // Case 5. pixel and its neighbor are not in mask                  == NOT IMPORTANT
 
                 const Point neighborPoint = translatePoint(outputPoint, direction);
-                const int neighborNode = nodeIndex(patchPoint, direction);
+                const int neighborNode = nodeIndex(patchPoint, direction, patch);
 
                 if (outputMask(outputPoint) && outputMask(neighborPoint)) {
 
                     const int seam = seamIndex(outputPoint, direction);
 
-                    if (oldSeams[seam].cost >= 0) {
+                    if (oldSeams[seam].cost > 0) {
                         //Add an seam node
                         graph->add_node();
                         //Connect it to the new patch (e.g. SINK) with the old cost
@@ -205,7 +203,8 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
 
                         lastNode++;
                     } else {
-                        const CAP_TYPE cap = edgeWeight(patchPoint, outputPoint, direction) + DBL_EPSILON;
+                        const CAP_TYPE cap =
+                                edgeWeight(patchPoint, outputPoint, direction, patch) + DBL_EPSILON;
                         graph->add_edge(node, neighborNode, cap, cap);
                     }
                 }
@@ -222,13 +221,18 @@ GRAPH_TYPE *Patcher::buildGraphForOffset(const Point &offset) const {
     return graph;
 }
 
-CAP_TYPE Patcher::edgeWeight(const Point &patchPoint, const Point &outputPoint, char direction) const {
+inline CAP_TYPE Patcher::edgeWeight(const Point &patchPoint, const Point &outputPoint, char direction,
+                                    const Image<Vec3b> &patch) const {
 
     return norm(patch(patchPoint) - output(outputPoint)) +
            norm(patch(translatePoint(patchPoint, direction)) - output(translatePoint(outputPoint, direction)));
 }
 
-CAP_TYPE Patcher::edgeWeight(const Vec3b &As, const Vec3b &Bs, const Vec3b &At, const Vec3b &Bt) const {
+inline CAP_TYPE Patcher::edgeWeight(const Vec3b &As, const Vec3b &Bs, const Vec3b &At, const Vec3b &Bt) const {
     return norm(As - Bs) +
            norm(At - Bt);
+}
+
+CAP_TYPE Patcher::seamCost(const Point &pt, char direction) const {
+    return oldSeams[seamIndex(pt, direction)].cost;
 }

@@ -7,12 +7,16 @@
 #define OVERLAP_WIDTH (1<<3)
 
 RandomOffsetChooser::RandomOffsetChooser(const Image<Vec3b> *patch, const Image<uchar> *outputMask) :
-        OffsetChooser(patch, outputMask) {
+        OffsetChooser(),
+        patch(patch),
+        outputMask(outputMask) {
 
 }
 
-// Returns a valid offset for the new patch to apply
-Point RandomOffsetChooser::getNewOffset(bool *foundMask) const {
+// Returns a valid offset for the new inputPatch to apply
+Point RandomOffsetChooser::getNewOffset(Image<Vec3b> &newPatch, bool *foundMask) {
+
+    newPatch = *patch;
 
     int minX, maxX, minY, maxY;
     getBoundaries(*outputMask, &minX, &maxX, &minY, &maxY);

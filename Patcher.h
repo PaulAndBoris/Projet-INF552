@@ -12,6 +12,14 @@
 #include "OffsetChooser.h"
 #include "maxflow/graph.h"
 
+
+enum Direction {
+    NONE = 0,
+    RIGHT,
+    BOTTOM,
+    LAST
+};
+
 typedef struct Seam{
     CAP_TYPE cost;
     Vec3b point_1;
@@ -24,7 +32,7 @@ typedef struct Seam{
 class Patcher {
 
 private:
-    const Image<Vec3b> patch;
+    const Image<Vec3b> inputPatch;
     const Rect canvasRect;
     Image<Vec3b> output;
     Image<uchar> outputMask;
@@ -32,16 +40,19 @@ private:
 
     OffsetChooser *offsetChooser;
 
-    GRAPH_TYPE *buildGraphForOffset(const Point &offset) const;
+    GRAPH_TYPE *buildGraphForOffset(const Point &offset, const Image<Vec3b> &patch) const;
     int seamIndex(const Point &outputPoint, char direction) const;
-    int nodeIndex(const Point &patchPoint, char direction = 0) const;
-    Point translatePoint(const Point &pt, char direction) const;
-    float edgeWeight(const Point &patchPoint, const Point &outputPoint, char direction) const;
-    float edgeWeight(const Vec3b &As, const Vec3b &Bs, const Vec3b &At, const Vec3b &Bt) const ;
+    int nodeIndex(const Point &patchPoint, char direction, const Image<Vec3b> &patch) const;
+    inline CAP_TYPE edgeWeight(const Point &patchPoint, const Point &outputPoint, char direction,
+                                   const Image<Vec3b> &patch) const;
+    inline CAP_TYPE edgeWeight(const Vec3b &As, const Vec3b &Bs, const Vec3b &At, const Vec3b &Bt) const ;
 
 public:
     Patcher(const Image<Vec3b> &patch, int width, int height);
     ~Patcher();
+
+    static Point translatePoint(const Point &pt, char direction);
+    CAP_TYPE seamCost(const Point &pt, char direction) const;
 
     const Image<Vec3b> step();
 

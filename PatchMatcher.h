@@ -10,13 +10,15 @@
 class PatchMatcher : public OffsetChooser {
 
 private:
+    const Image<Vec3b> *patch;
+    const Image<uchar> *outputMask;
     const Image<Vec3b> *output;
     double factor;
 
 public:
     PatchMatcher(const Image<Vec3b> *patch, const Image<Vec3b> *output, const Image<uchar> *outputMask);
 
-    virtual Point getNewOffset(bool *foundMask) const;
+    virtual Point getNewOffset(Image<Vec3b> &newPatch, bool *foundMask);
 
 };
 

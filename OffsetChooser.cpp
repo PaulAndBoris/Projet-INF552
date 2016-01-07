@@ -9,9 +9,7 @@ OffsetChooser::~OffsetChooser() {
 
 }
 
-OffsetChooser::OffsetChooser(const Image<Vec3b> *patch, const Image<uchar> *outputMask) :
-        patch(patch),
-        outputMask(outputMask) {
+OffsetChooser::OffsetChooser() {
 
     // Initialise random number generator
     srand((unsigned int) time(NULL));
