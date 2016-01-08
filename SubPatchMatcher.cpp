@@ -6,7 +6,7 @@
 #include <iostream>
 #include "SubPatchMatcher.h"
 
-#define OVERLAP_WIDTH (1<<5)
+#define OVERLAP_WIDTH (1<<4)
 #define K 0.3
 #define WINDOW_RATIO 0.5
 
@@ -36,7 +36,7 @@ Point SubPatchMatcher::getNewOffset(Image<Vec3b> &newPatch, bool *foundMask) {
         nextOffset.x += windowWidth - OVERLAP_WIDTH;
         if (nextOffset.x >= output->width()) {
             nextOffset.x = 0;
-            nextOffset.y += windowWidth - OVERLAP_WIDTH;
+            nextOffset.y += windowHeight - OVERLAP_WIDTH;
         }
         if (nextOffset.y >= output->height()) {
             nextOffset.x = -1;
