@@ -15,8 +15,12 @@
 
 Patcher::Patcher(const Image<Vec3b> &patch, int width, int height) :
         inputPatch(patch),
-        canvasRect(patch.width(), patch.height(), width, height),
-        output(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8UC3)),
+
+//        canvasRect(patch.width(), patch.height(), width + 2 * patch.width(), height + 2 * patch.height()),
+        canvasRect(0, 0, width, height),
+//        output(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8UC3)),
+        output(Mat::zeros(height, width, CV_8UC3)),
+
         outputMask(Mat::zeros(height + 2 * patch.height(), width + 2 * patch.width(), CV_8U)) {
 
 //    offsetChooser = new RandomOffsetChooser(&inputPatch, &outputMask);
