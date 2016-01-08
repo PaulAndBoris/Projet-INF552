@@ -81,7 +81,7 @@ const Image<Vec3b> Patcher::step() {
     bool foundMask;
     Image<Vec3b> patch;
 
-    Point offset = offsetChooser->getNewOffset(patch, &foundMask);
+    const Point offset = offsetChooser->getNewOffset(patch, &foundMask);
 
     Image<uchar> patchMask(Mat::zeros(patch.height(), patch.width(), CV_8U) + 255);
 
@@ -112,7 +112,7 @@ const Image<Vec3b> Patcher::step() {
                         continue;
 
                     const Point neighborPt = translatePoint(pt, direction);
-                    const Point neighborOutputPoint = offset + outputPoint;
+                    const Point neighborOutputPoint = offset + neighborPt;
 
                     if (patchMask(pt) != patchMask(neighborPt)) {
 
