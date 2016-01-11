@@ -87,6 +87,8 @@ const Image<Vec3b> Patcher::step() {
 
     const Point offset = offsetChooser->getNewOffset(patch, &foundMask);
 
+    imshow("subpatch", patch);
+
     Image<uchar> patchMask(Mat::zeros(patch.height(), patch.width(), CV_8U) + 255);
 
     if (foundMask) {
@@ -144,7 +146,34 @@ const Image<Vec3b> Patcher::step() {
     patch.copyTo(((Mat) output)(patchRect), patchMask);
     patchMask.copyTo(((Mat) outputMask)(patchRect), patchMask);
 
-    imshow("outputMask", ((Mat) outputMask)(canvasRect));
+//    imshow("outputMask", ((Mat) outputMask)(canvasRect));
+
+    // TEST
+
+    Image<float> visibleSeams(Mat::zeros(output.rows, output.cols, CV_32F) + 128);
+
+    // Updating old seams
+    Point pt;
+    for (pt.y = 0; pt.y < output.height(); pt.y++)
+        for (pt.x = 0; pt.x < output.width(); pt.x++) {
+
+            for (char direction = RIGHT; direction != LAST; direction++) {
+
+                if ((direction == RIGHT && pt.x == output.width() - 1) ||
+                    (direction == BOTTOM && pt.y == output.height() - 1))
+                    continue;
+
+                visibleSeams(pt) += seamCost(pt, direction);
+//                if (seamCost(pt, direction))
+//                    visibleSeams(pt) = 255;
+            }
+        }
+
+    patchMask.copyTo(((Mat) visibleSeams)(patchRect));
+
+    imshow("visibleSeams", visibleSeams.greyImage());
+
+    // END TEST
 
     return ((Mat) output)(canvasRect);
 }

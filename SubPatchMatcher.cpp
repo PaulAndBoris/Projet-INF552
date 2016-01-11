@@ -6,9 +6,9 @@
 #include <iostream>
 #include "SubPatchMatcher.h"
 
-#define OVERLAP_WIDTH (1<<4)
-#define K 0.3
-#define WINDOW_RATIO 0.5
+#define OVERLAP_WIDTH (1<<3)
+#define K 1e-5
+#define WINDOW_RATIO 0.8
 
 SubPatchMatcher::SubPatchMatcher(const Image<Vec3b> *patch, const Image<Vec3b> *output, const Image<uchar> *outputMask, const Patcher *patcher) :
     OffsetChooser(),
@@ -53,41 +53,44 @@ Point SubPatchMatcher::getNewOffset(Image<Vec3b> &newPatch, bool *foundMask) {
 
         Image<float> C;
 
-        Image<Vec3f> patchF, windowF, windowMaskF;
-        Mat windowMask;
+//        Image<Vec3f> patchF, windowF, windowMaskF;
+        Mat windowMask, window;
         assert(patch->type() == CV_8UC3);
         assert(output->type() == CV_8UC3);
 
-        patch->convertTo(patchF, CV_32FC3);
-        ((Mat) *output)(windowRect).convertTo(windowF, CV_32FC3);
+//        patch->convertTo(patchF, CV_32FC3);
+//        ((Mat) *output)(windowRect).convertTo(windowF, CV_32FC3);
+        window = ((Mat) *output)(windowRect);
         windowMask = ((Mat) *outputMask)(windowRect);
 
         Scalar mean, stddev;
-        meanStdDev(windowF, mean, stddev, windowMask);
+        meanStdDev(window, mean, stddev, windowMask);
 
         const double maskSize = norm(sum(windowMask / 255));
         const double factor = - 1.0 / (K * pow(norm(stddev), 2) * maskSize);
 
         cvtColor(windowMask, windowMask, CV_GRAY2BGR, 3);
         imshow("windowMask", windowMask);
-        windowMask.convertTo(windowMaskF, CV_32FC3);
-//        ((Mat) *outputMask)(windowRect).convertTo(windowMaskF, CV_32FC3);
 
-        assert(!windowMaskF.empty());
-        assert(windowF.size == windowMaskF.size);
-        assert(windowF.size < patchF.size);
-        assert(patchF.type() == windowF.type());
-        assert(patchF.type() == windowMaskF.type());
+        assert(!windowMask.empty());
+        assert(window.size == windowMask.size);
+        assert(window.size < patch->size);
+        assert(patch->type() == window.type());
+        assert(patch->type() == windowMask.type());
+//        imshow("windowMaskF", windowMaskF);
 
-        imshow("windowMaskF", windowMaskF);
+        matchTemplate(*patch, window, C, TM_SQDIFF, windowMask);
 
-        matchTemplate(patchF, windowF, C, TM_SQDIFF); // ,windowMaskF);
+        Image<float> C2;
+        exp(C * factor, C2);
 
-        exp(C * factor, C);
+        double min, max;
+        Point maxLoc;
+        minMaxLoc(C2, &min, &max, 0, &maxLoc);
 
-        imshow("C", C.greyImage());
+        imshow("C", C2.greyImage());
 
-        float acc = 0, *data = (float *) C.data;
+        float acc = 0, *data = (float *) C2.data;
 
         for (int i = 0; i < C.height() * C.width(); i++) {
             acc += data[i];
@@ -106,14 +109,16 @@ Point SubPatchMatcher::getNewOffset(Image<Vec3b> &newPatch, bool *foundMask) {
                 b = m;
         }
 
+//         Seems to work
+//        assert(p <= data[a] && (a == 0 || p > data[a-1]));
+//        assert(data[a] == C(a % C.width(), a / C.width()));
+
         patchRect = Rect(Point(a % C.width(), a / C.width()), windowRect.size());
+//        patchRect = Rect(maxLoc, windowRect.size());
     }
 
     newPatch = ((Mat) *patch)(patchRect);
 
-    // Seems to work
-//        assert(p <= data[a] && (a == 0 || p > data[a-1]));
-//        assert(data[a] == C(a % C.width(), a / C.width()));
 
     return windowOffset;
 }
