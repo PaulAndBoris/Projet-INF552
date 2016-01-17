@@ -17,7 +17,7 @@ public:
     OffsetChooser();
     virtual ~OffsetChooser();
 
-    virtual Point getNewOffset(Image<Vec3b> &newPatch, bool *foundMask) = 0;
+    virtual Point getNewOffset(Image<Vec3b> *newPatch, bool *foundMask) = 0;
 };
 
 

@@ -6,14 +6,15 @@
 #include <opencv2/highgui.hpp>
 #include "PatchMatcher.h"
 
-#define OVERLAP_WIDTH (1<<3)
+#define OVERLAP_WIDTH (1<<4)
 #define K 1.0
 
 PatchMatcher::PatchMatcher(const Image<Vec3b> *patch, const Image<Vec3b> *output, const Image<uchar> *outputMask) :
     OffsetChooser(),
     patch(patch),
     output(output),
-    outputMask(outputMask) {
+    outputMask(outputMask),
+    nextOffset(0, 0) {
 
     Scalar mean, stddev;
     meanStdDev(*patch, mean, stddev);
@@ -21,41 +22,43 @@ PatchMatcher::PatchMatcher(const Image<Vec3b> *patch, const Image<Vec3b> *output
     factor = - 1.0 / (K * pow(norm(stddev), 2) * patch->width() * patch->height());
 }
 
-Point PatchMatcher::getNewOffset(Image<Vec3b> &newPatch, bool *foundMask) {
+Point PatchMatcher::getNewOffset(Image<Vec3b> *newPatch, bool *foundMask) {
 
-    newPatch = *patch;
+    *foundMask = nextOffset != Point(0, 0);
 
-    int minX, maxX, minY, maxY;
-    getBoundaries(*outputMask, &minX, &maxX, &minY, &maxY);
+    if (nextOffset.x >= 0 && nextOffset.y >= 0) {
 
-    if (maxX < 0 || maxY < 0) {
-        *foundMask = false;
-        return Point(randRange(0, outputMask->width()  - patch->width()  + 1),
-                     randRange(0, outputMask->height() - patch->height() + 1));
+        const Point windowOffset = nextOffset;
+
+        nextOffset.x += patch->width() - OVERLAP_WIDTH;
+        if (nextOffset.x >= output->width()) {
+            nextOffset.x = 0;
+            nextOffset.y += patch->height() - OVERLAP_WIDTH;
+        }
+        if (nextOffset.y >= output->height()) {
+            nextOffset.x = -1;
+            nextOffset.y = -1;
+        }
+
+        *newPatch = ((Mat) *patch)(Rect(0, 0, min(patch->width(), output->width() - windowOffset.x), min(patch->height(), output->height() - windowOffset.y)));
+
+        return windowOffset;
+
     } else {
-        *foundMask = true;
+
+        *newPatch = *patch;
 
         Image<float> C;
 
-        // Compute allowed translations window
-        minX = max(0, minX - patch->width()  + OVERLAP_WIDTH);
-        minY = max(0, minY - patch->height() + OVERLAP_WIDTH);
-        maxX = min(output->width()  - 1, maxX + patch->width()  - OVERLAP_WIDTH);
-        maxY = min(output->height() - 1, maxY + patch->height() - OVERLAP_WIDTH);
-        const Rect outputRect(minX, minY, maxX - minX + 1, maxY - minY + 1);
-
-        Mat patchF, outputF;
-        assert(patch->type() == CV_8UC3);
-        assert(output->type() == CV_8UC3);
-
-        patch->convertTo(patchF, CV_32FC3);
-        ((Mat) *output)(outputRect).convertTo(outputF, CV_32FC3);
-
-        matchTemplate(outputF, patchF, C, TM_SQDIFF);
+        matchTemplate(*patch, *output, C, TM_SQDIFF);
 
         exp(C * factor, C);
 
-//        imshow("C", C.greyImage());
+        double min, max;
+        Point maxLoc;
+        minMaxLoc(C, &min, &max, 0, &maxLoc);
+
+        imshow("C", C.greyImage());
 
         float acc = 0, *data = (float *) C.data;
 
@@ -76,10 +79,7 @@ Point PatchMatcher::getNewOffset(Image<Vec3b> &newPatch, bool *foundMask) {
                 b = m;
         }
 
-        // Seems to work
-//        assert(p <= data[a] && (a == 0 || p > data[a-1]));
-//        assert(data[a] == C(a % C.width(), a / C.width()));
-
-        return Point(minX + a % C.width(), minY + a / C.width());
+        return Point(a % C.width(), a / C.width());
+//        return maxLoc;
     }
 }

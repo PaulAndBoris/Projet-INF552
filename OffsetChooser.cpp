@@ -48,7 +48,6 @@ void OffsetChooser::getBoundaries(const Image<uchar> &mask, int *minX, int *maxX
     else if (*maxX < *minX) // Mask touches the border of the image
         *maxX = mask.width() - 1;
 
-
     // Iterate on columns
     for (x = 0; x < mask.width(); x++) {
 

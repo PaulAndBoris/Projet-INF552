@@ -18,7 +18,7 @@ private:
 public:
     RandomOffsetChooser(const Image<Vec3b> *patch, const Image<uchar> *outputMask);
 
-    virtual Point getNewOffset(Image<Vec3b> &newPatch, bool *foundMask);
+    virtual Point getNewOffset(Image<Vec3b> *newPatch, bool *foundMask);
 
 };
 

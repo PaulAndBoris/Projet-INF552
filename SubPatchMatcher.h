@@ -20,12 +20,12 @@ private:
     Point nextOffset;
     const int windowWidth, windowHeight;
 
-    Point computeWindowOffset() const;
+    Point findGoodOffset() const;
 
 public:
     SubPatchMatcher(const Image<Vec3b> *patch, const Image<Vec3b> *output, const Image<uchar> *outputMask, const Patcher *patcher);
 
-    virtual Point getNewOffset(Image<Vec3b> &newPatch, bool *foundMask);
+    virtual Point getNewOffset(Image<Vec3b> *newPatch, bool *foundMask);
 
 };
 
